@@ -1,0 +1,197 @@
+import time
+import requests
+import random
+import matplotlib.pyplot as plt
+import json
+import jwt
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import psutil
+
+# Load a JSON configuration file
+def load_config(config_file):
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    return config
+
+# Generate a JWT token using the private RSA key and user ID
+def generate_jwt(private_key, user_id):
+    payload = {
+        'user_id': user_id,
+        'exp': int(time.time()) + 300
+    }
+    return jwt.encode(payload, private_key, algorithm='RS256')
+
+# Simulate server certificate verification
+def verify_server_certificate(cert):
+    time.sleep(random.uniform(0.01, 0.05))
+    return random.random() > 0.01
+
+# Simulate a TLS handshake including ECDHE key exchange
+def simulate_tls_handshake(security_config):
+    tls_latency_mean, tls_latency_std_dev = security_config['tls_handshake_latency']
+    tls_latency = max(0, random.normalvariate(tls_latency_mean, tls_latency_std_dev))
+    time.sleep(tls_latency)
+
+    ecdhe_latency_mean, ecdhe_latency_std_dev = security_config['ecdhe_latency']
+    ecdhe_latency = max(0, random.normalvariate(ecdhe_latency_mean, ecdhe_latency_std_dev))
+    time.sleep(ecdhe_latency)
+
+    return tls_latency + ecdhe_latency
+
+# Simulate device authentication
+def simulate_device_authentication(security_config):
+    auth_latency_mean, auth_latency_std_dev = security_config['device_auth_latency']
+    auth_latency = max(0, random.normalvariate(auth_latency_mean, auth_latency_std_dev))
+    time.sleep(auth_latency)
+    return auth_latency
+
+# Perform the entire request process in parallel: TLS handshake, device authentication, and cert verification
+def parallel_request(api_url, security_config, private_key, user_id):
+    start = time.time()
+    start_cpu = psutil.cpu_times()
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        tls_future = executor.submit(simulate_tls_handshake, security_config)
+        auth_future = executor.submit(simulate_device_authentication, security_config)
+        cert_future = executor.submit(verify_server_certificate, None)
+
+        handshake_latency = tls_future.result()
+        auth_latency = auth_future.result()
+        cert_verified = cert_future.result()
+
+    if not cert_verified:
+        end_cpu = psutil.cpu_times()
+        cpu_usage = sum(end_cpu) - sum(start_cpu)
+        return None, "Certificate verification failed", cpu_usage
+
+    jwt_token = generate_jwt(private_key, user_id)
+
+    if random.random() < security_config['packet_loss_probability']:
+        end_cpu = psutil.cpu_times()
+        cpu_usage = sum(end_cpu) - sum(start_cpu)
+        return None, "Packet loss", cpu_usage
+
+    headers = {'Authorization': f'Bearer {jwt_token}'}
+    try:
+        response = requests.get(api_url, headers=headers, timeout=security_config['request_timeout'])
+    except requests.exceptions.RequestException as e:
+        end_cpu = psutil.cpu_times()
+        cpu_usage = sum(end_cpu) - sum(start_cpu)
+        return None, f"Request failed: {str(e)}", cpu_usage
+
+    end = time.time()
+    end_cpu = psutil.cpu_times()
+    cpu_usage = sum(end_cpu) - sum(start_cpu)
+
+    if response.status_code == 200:
+        latency = (end - start) + handshake_latency + auth_latency
+        return latency, "Success", cpu_usage
+    else:
+        return None, f"Authentication failed: {response.status_code}", cpu_usage
+
+# Test the API by making multiple requests and collecting latency and failure statistics
+def test_api(api_url, security_config, num_requests, private_key, user_id):
+    latencies = []
+    packet_loss = 0
+    total_latency = 0
+    auth_failures = 0
+    cert_failures = 0
+    other_failures = 0
+    cpu_usages = []
+    total_cpu_usage = 0
+
+    # Initialize CPU usage monitoring
+    psutil.cpu_percent(interval=None)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_request = {executor.submit(parallel_request, api_url, security_config, private_key, user_id): i for i in range(num_requests)}
+
+        for future in as_completed(future_to_request):
+            result, status, cpu_usage = future.result()
+            cpu_usages.append(cpu_usage)
+            total_cpu_usage += cpu_usage
+            if result is not None:
+                latency = result
+                total_latency += latency
+                latencies.append(latency)
+                print(f"Latency: {latency * 1000:.2f} ms, CPU Usage: {cpu_usage:.6f} seconds")
+            else:
+                if status == "Certificate verification failed":
+                    cert_failures += 1
+                elif status == "Packet loss":
+                    packet_loss += 1
+                elif status.startswith("Authentication failed"):
+                    auth_failures += 1
+                else:
+                    other_failures += 1
+                print(f"{status}, CPU Usage: {cpu_usage:.6f} seconds")
+
+    # Get total CPU usage percentage
+    total_cpu_percent = psutil.cpu_percent(interval=None)
+
+    successful_requests = len(latencies)
+    print(f"\nResults Summary:")
+    print(f"Successful Requests: {successful_requests}/{num_requests} ({successful_requests / num_requests * 100:.2f}%)")
+    print(f"Total Latency: {total_latency * 1000:.2f} ms")
+    print(f"Average Latency: {(total_latency / successful_requests) * 1000:.2f} ms" if successful_requests else "N/A")
+    print(f"Packet Losses: {packet_loss}/{num_requests} ({packet_loss / num_requests * 100:.2f}%)")
+    print(f"Authentication Failures: {auth_failures}/{num_requests} ({auth_failures / num_requests * 100:.2f}%)")
+    print(f"Certificate Verification Failures: {cert_failures}/{num_requests} ({cert_failures / num_requests * 100:.2f}%)")
+    print(f"Other Failures: {other_failures}/{num_requests} ({other_failures / num_requests * 100:.2f}%)")
+    print(f"Total CPU Usage: {total_cpu_usage:.6f} seconds")
+    print(f"Total CPU Usage Percentage: {total_cpu_percent:.2f}%")
+
+    plot_latency_and_failures(latencies, packet_loss, auth_failures, cert_failures, api_url, cpu_usages, total_cpu_percent)
+
+# Plot the latencies, failures, and CPU usage in charts
+def plot_latency_and_failures(latencies, packet_loss, auth_failures, cert_failures, api_url, cpu_usages, total_cpu_percent):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
+
+    # Latency and Failures plot
+    ax1.set_title(f"API Latency and Failures in Zero Trust Environment for {api_url}")
+    if latencies:
+        ax1.bar(range(len(latencies)), latencies, label='Latency', color='blue')
+        max_latency = max(latencies)
+    else:
+        max_latency = 1
+    ax1.scatter([len(latencies)] * packet_loss, [max_latency] * packet_loss, color='red', marker='x', label='Packet Loss', s=100)
+    ax1.scatter([len(latencies)] * auth_failures, [max_latency] * auth_failures, color='orange', marker='o', label='Auth Failure', s=100)
+    ax1.scatter([len(latencies)] * cert_failures, [max_latency] * cert_failures, color='purple', marker='s', label='Cert Failure', s=100)
+    ax1.set_ylabel('Latency (seconds)')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.7)
+
+    # CPU Usage plot
+    ax2.bar(range(len(cpu_usages)), cpu_usages, label='CPU Usage', color='green')
+    ax2.set_title(f"CPU Usage per Request (Total: {sum(cpu_usages):.6f} seconds, {total_cpu_percent:.2f}%)")
+    ax2.set_xlabel('Request Index')
+    ax2.set_ylabel('CPU Usage (seconds)')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+
+# Main execution when script is run directly
+if __name__ == '__main__':
+    config = load_config('config.json')
+
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
+    )
+
+    api_url = config['api_url']
+    security_config = config['security_config']
+    num_requests = config['num_requests']
+    user_id = config['user_id']
+
+    print(f"Testing API in Zero Trust Environment: {api_url}")
+    print(f"Number of requests: {num_requests}")
+    print(f"Packet loss probability: {security_config['packet_loss_probability']}")
+    print(f"Request timeout: {security_config['request_timeout']} seconds")
+    print("\nStarting test...\n")
+
+    test_api(api_url, security_config, num_requests, private_key, user_id)
