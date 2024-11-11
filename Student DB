@@ -1,0 +1,350 @@
+import sqlite3
+from tkinter import *
+from plyer import notification
+
+# Function to create the database table
+def create_table():
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS student (
+                    name TEXT,
+                    course1 TEXT,
+                    grade1 INTEGER,
+                    course2 TEXT,
+                    grade2 INTEGER,
+                    course3 TEXT,
+                    grade3 INTEGER,
+                    course4 TEXT,
+                    grade4 INTEGER,
+                    course5 TEXT,
+                    grade5 INTEGER
+                    )''')
+    conn.commit()
+    conn.close()
+
+# Function to add a student to the database
+def add_student():
+    name = entry_name.get()
+    course1 = entry_course1.get()
+    grade1 = entry_grade1.get()
+    course2 = entry_course2.get()
+    grade2 = entry_grade2.get()
+    course3 = entry_course3.get()
+    grade3 = entry_grade3.get()
+    course4 = entry_course4.get()
+    grade4 = entry_grade4.get()
+    course5 = entry_course5.get()
+    grade5 = entry_grade5.get()
+
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO student VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (name, course1, grade1, course2, grade2, course3, grade3, course4, grade4, course5, grade5))
+    conn.commit()
+    conn.close()
+    clear_entries()
+    status_label.config(text="Student added successfully!")
+
+# Function to clear the entry fields
+def clear_entries():
+    entry_name.delete(0, END)
+    entry_course1.delete(0, END)
+    entry_grade1.delete(0, END)
+    entry_course2.delete(0, END)
+    entry_grade2.delete(0, END)
+    entry_course3.delete(0, END)
+    entry_grade3.delete(0, END)
+    entry_course4.delete(0, END)
+    entry_grade4.delete(0, END)
+    entry_course5.delete(0, END)
+    entry_grade5.delete(0, END)
+    entry_search.delete(0, END)
+
+# Function to display the database
+def show_database():
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student")
+    rows = c.fetchall()
+    conn.close()
+    display_text.delete("1.0", END)
+    for row in rows:
+        display_text.insert(END, f"Name: {row[0]}\n")
+        display_text.insert(END, f"{row[1]}: {row[2]}\n")
+        display_text.insert(END, f"{row[3]}: {row[4]}\n")
+        display_text.insert(END, f"{row[5]}: {row[6]}\n")
+        display_text.insert(END, f"{row[7]}: {row[8]}\n")
+        display_text.insert(END, f"{row[9]}: {row[10]}\n")
+        display_text.insert(END, "\n")
+
+# Function to search and display a student's record
+def search_student():
+    name = entry_search.get()
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student WHERE name=?", (name,))
+    row = c.fetchone()
+    conn.close()
+    display_text.delete("1.0", END)
+    if row:
+        display_text.insert(END, f"Name: {row[0]}\n")
+        display_text.insert(END, f"{row[1]}: {row[2]}\n")
+        display_text.insert(END, f"{row[3]}: {row[4]}\n")
+        display_text.insert(END, f"{row[5]}: {row[6]}\n")
+        display_text.insert(END, f"{row[7]}: {row[8]}\n")
+        display_text.insert(END, f"{row[9]}: {row[10]}\n")
+        display_text.insert(END, "\n")
+        delete_button = Button(window, text="Delete", command=lambda: delete_student(name))
+        delete_button.grid(row=9, column=0, pady=1)
+        edit_button = Button(window, text="Edit", command=lambda: edit_student(name))
+        edit_button.grid(row=9, column=1, pady=1)
+    else:
+        display_text.insert(END, "No matching record found.")
+
+# Function to delete a student's record
+def delete_student(name):
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM student WHERE name=?", (name,))
+    conn.commit()
+    conn.close()
+    display_text.delete("1.0", END)
+    display_text.insert(END, f"Record for {name} deleted successfully.")
+
+# Function to edit a student's record
+def edit_student(name):
+    # Get the existing record
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student WHERE name=?", (name,))
+    row = c.fetchone()
+    conn.close()
+
+    if row:
+        # Set the entry fields with existing values
+        entry_name.delete(0, END)
+        entry_name.insert(END, row[0])
+        entry_course1.delete(0, END)
+        entry_course1.insert(END, row[1])
+        entry_grade1.delete(0, END)
+        entry_grade1.insert(END, row[2])
+        entry_course2.delete(0, END)
+        entry_course2.insert(END, row[3])
+        entry_grade2.delete(0, END)
+        entry_grade2.insert(END, row[4])
+        entry_course3.delete(0, END)
+        entry_course3.insert(END, row[5])
+        entry_grade3.delete(0, END)
+        entry_grade3.insert(END, row[6])
+        entry_course4.delete(0, END)
+        entry_course4.insert(END, row[7])
+        entry_grade4.delete(0, END)
+        entry_grade4.insert(END, row[8])
+        entry_course5.delete(0, END)
+        entry_course5.insert(END, row[9])
+        entry_grade5.delete(0, END)
+        entry_grade5.insert(END, row[10])
+        status_label.config(text="Editing record for: " + name)
+
+        # Delete the existing record
+        conn = sqlite3.connect('student.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM student WHERE name=?", (name,))
+        conn.commit()
+        conn.close()
+
+
+
+# Function to clear the entire database
+def clear_database():
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM student")
+    conn.commit()
+    conn.close()
+    display_text.delete("1.0", END)
+    status_label.config(text="Database cleared successfully!")
+def show_below_average():
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student")
+    rows = c.fetchall()
+    conn.close()
+
+    below_average = []
+    for row in rows:
+        grades = []
+        for i in range(2, 11, 2):
+            grade = row[i]
+            try:
+                if grade:
+                    grades.append(int(grade))
+            except ValueError:
+                pass
+
+        if grades:
+            average_grade = sum(grades) / len(grades)
+            if average_grade < 15:
+                below_average.append((row[0], average_grade))
+
+    display_text.delete("1.0", END)
+    if below_average:
+        display_text.insert(END, "Students with below-average grades:\n\n")
+        for student, average_grade in below_average:
+            display_text.insert(END, f"Name: {student}\nAverage Grade: {str(average_grade)}\n\n")
+    else:
+        display_text.insert(END, "No students found with below-average grades.")
+def check_below_average_and_notify():
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student")
+    rows = c.fetchall()
+    conn.close()
+
+    below_average = []
+    for row in rows:
+        grades = []
+        for i in range(2, 11, 2):
+            grade = row[i]
+            try:
+                if grade:
+                    grades.append(int(grade))
+            except ValueError:
+                pass
+
+        if grades:
+            average_grade = sum(grades) / len(grades)
+            if average_grade < 15:
+                below_average.append((row[0], average_grade))
+
+    if below_average:
+        notification_text = "Students with below-average grades:\n\n"
+        for student, average_grade in below_average:
+            notification_text += f"Name: {student}\nAverage Grade: {str(average_grade)}\n\n"
+    else:
+        notification_text = "No students found with below-average grades."
+
+    # Send notification
+    notification.notify(
+        app_name="Notification",
+        title="Below Average Students",
+        message=notification_text,
+        timeout=1,
+        toast=True,  # True for Windows toast notification style, False for standard notification style
+    )
+
+
+def calculate_average_grade():
+    name = entry_search.get()
+    conn = sqlite3.connect('student.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM student WHERE name=?", (name,))
+    row = c.fetchone()
+    conn.close()
+
+    display_text.delete("1.0", END)
+    if row:
+        grades = []
+        for i in range(2, 11, 2):
+            grade = row[i]
+            try:
+                if grade:
+                    grades.append(int(grade))
+            except ValueError:
+                pass
+
+        if grades:
+            average_grade = sum(grades) / len(grades)
+            display_text.insert(END, f"Average Grade for {name}: {average_grade:.2f}")
+        else:
+            display_text.insert(END, f"No grades available for {name}.")
+    else:
+        display_text.insert(END, "No matching record found.")
+
+# Create the database table
+create_table()
+
+# Create the GUI
+window = Tk()
+window.title("Student Database")
+
+# Labels
+label_name = Label(window, text="Name:")
+label_name.grid(row=0, column=0)
+label_course1 = Label(window, text="Course 1:")
+label_course1.grid(row=1, column=0)
+label_grade1 = Label(window, text="Grade 1:")
+label_grade1.grid(row=1, column=2)
+label_course2 = Label(window, text="Course 2:")
+label_course2.grid(row=2, column=0)
+label_grade2 = Label(window, text="Grade 2:")
+label_grade2.grid(row=2, column=2)
+label_course3 = Label(window, text="Course 3:")
+label_course3.grid(row=3, column=0)
+label_grade3 = Label(window, text="Grade 3:")
+label_grade3.grid(row=3, column=2)
+label_course4 = Label(window, text="Course 4:")
+label_course4.grid(row=4, column=0)
+label_grade4 = Label(window, text="Grade 4:")
+label_grade4.grid(row=4, column=2)
+label_course5 = Label(window, text="Course 5:")
+label_course5.grid(row=5, column=0)
+label_grade5 = Label(window, text="Grade 5:")
+label_grade5.grid(row=5, column=2)
+label_search = Label(window, text="Search The Name To Operate :")
+label_search.grid(row=8, column=3, padx=0, pady=0)
+
+# Entry fields
+entry_name = Entry(window)
+entry_name.grid(row=0, column=1)
+entry_course1 = Entry(window)
+entry_course1.grid(row=1, column=1)
+entry_grade1 = Entry(window)
+entry_grade1.grid(row=1, column=3)
+entry_course2 = Entry(window)
+entry_course2.grid(row=2, column=1)
+entry_grade2 = Entry(window)
+entry_grade2.grid(row=2, column=3)
+entry_course3 = Entry(window)
+entry_course3.grid(row=3, column=1)
+entry_grade3 = Entry(window)
+entry_grade3.grid(row=3, column=3)
+entry_course4 = Entry(window)
+entry_course4.grid(row=4, column=1)
+entry_grade4 = Entry(window)
+entry_grade4.grid(row=4, column=3)
+entry_course5 = Entry(window)
+entry_course5.grid(row=5, column=1)
+entry_grade5 = Entry(window)
+entry_grade5.grid(row=5, column=3)
+entry_search = Entry(window)
+entry_search.grid(row=8, column=4, padx=0)
+
+# Buttons
+add_button = Button(window, text="Add", command=add_student)
+add_button.grid(row=7, column=1, pady=5)
+show_button = Button(window, text="Show Database", command=show_database)
+show_button.grid(row=8, column=2, pady=10, padx=10)
+clear_button = Button(window, text="Clear Entries", command=clear_entries)
+clear_button.grid(row=7, column=2, pady=5)
+search_button = Button(window, text="Search", command=search_student)
+search_button.grid(row=8, column=5, pady=10)
+clear_database_button = Button(window, text="Clear Database", command=clear_database, bg="red", fg="Black")
+clear_database_button.grid(row=1, column=4)
+below_average_button = Button(window, text="Show Below Average Students ", command=show_below_average)
+below_average_button.grid(row=8, column=1)
+calculate_average_button = Button(window, text="Calculate Average Grade", command=calculate_average_grade)
+calculate_average_button.grid(row=7, column=4, pady=2)
+# Status label
+status_label = Label(window, text="")
+status_label.grid(row=12, columnspan=8)
+
+# Text widget
+display_text = Text(window, height=30, width=90)
+display_text.grid(row=15, columnspan=12 , pady=2)
+
+
+check_below_average_and_notify()
+window.mainloop()
+check_below_average_and_notify()
+
